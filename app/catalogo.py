@@ -1,7 +1,7 @@
 # Inventario inicial de la farmacia. Precios en quetzales.
 # requiere_receta = medicamentos controlados (psicotropicos / estupefacientes)
 PRODUCTOS = [
-    {"codigo": "PAR500", "nombre": "Acetaminofen 500 mg x 10", "precio": "8.50", "existencias": 120, "requiere_receta": False},
+    {"codigo": "PAR500", "nombre": "Acetaminofén 500 mg x 10", "precio": "8.50", "existencias": 120, "requiere_receta": False},
     {"codigo": "IBU400", "nombre": "Ibuprofeno 400 mg x 10", "precio": "12.00", "existencias": 80, "requiere_receta": False},
     {"codigo": "LOR10", "nombre": "Loratadina 10 mg x 10", "precio": "15.75", "existencias": 60, "requiere_receta": False},
     {"codigo": "SRO", "nombre": "Suero oral 500 ml", "precio": "9.25", "existencias": 45, "requiere_receta": False},

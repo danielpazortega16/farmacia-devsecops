@@ -3,9 +3,11 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
 from app import db
@@ -23,7 +25,7 @@ def validar_llave(x_api_key: str = Header(default="")):
     esperada = os.environ.get("API_KEY", "")
     # sin llave configurada no se atiende nada
     if not esperada or not hmac.compare_digest(x_api_key, esperada):
-        raise HTTPException(status_code=401, detail="Llave de acceso invalida")
+        raise HTTPException(status_code=401, detail="Llave de acceso inválida")
 
 
 class Item(BaseModel):
@@ -49,6 +51,11 @@ def enmascarar(telefono):
     return telefono[:2] + "****" + telefono[-2:]
 
 
+@app.get("/", include_in_schema=False)
+def pantalla():
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+
 @app.get("/salud")
 def salud():
     return {"estado": "ok"}
@@ -71,7 +78,7 @@ def registrar_venta(pedido: Pedido):
             if prod is None:
                 raise HTTPException(404, f"Producto {item.codigo} no existe")
             if prod["requiere_receta"] and not pedido.numero_receta:
-                raise HTTPException(400, f"{prod['nombre']} solo se vende con receta medica")
+                raise HTTPException(400, f"{prod['nombre']} solo se vende con receta médica")
             if prod["existencias"] < item.cantidad:
                 raise HTTPException(409, f"No hay suficiente {prod['nombre']}")
             # el precio sale de la base, nunca del cliente
