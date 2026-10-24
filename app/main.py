@@ -18,6 +18,8 @@ async def ciclo_vida(app):
     yield
 
 
+PASARELA_API_KEY = "a8f5f167f44f4964e6c998dee827110c"
+
 app = FastAPI(title="Farmacia - registro de pedidos", version="0.2.0", lifespan=ciclo_vida)
 
 
