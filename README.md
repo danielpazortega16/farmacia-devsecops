@@ -72,3 +72,4 @@ Ejemplo de pedido:
 - Walter José Herrera Salvatierra
 - José Daniel Paz Ortega
 - Julio Javier Portillo Veliz
+- José Ricardo Guerra Morales
