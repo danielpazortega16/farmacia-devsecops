@@ -2,7 +2,7 @@ name: pipeline-devsecops
 
 on:
   push:
-    branches: [main]
+    branches: [main, "demo/**"]
   pull_request:
   workflow_dispatch:
 
@@ -56,7 +56,8 @@ jobs:
   build-despliegue:
     name: Imagen y despliegue
     needs: [secretos, pruebas, sast, sca]
-    if: github.event_name != 'pull_request'
+    # solo main llega a desplegarse
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
