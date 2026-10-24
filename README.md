@@ -12,7 +12,7 @@ Como el sistema maneja datos de salud y de pago, cada cambio al código pasa por
 
 ## Pipeline
 
-Cada push a `main` corre `.github/workflows/devsecops.yml`:
+Cada push corre `.github/workflows/devsecops.yml`:
 
 1. Gitleaks: busca llaves y contraseñas en todo el historial.
 2. Pruebas unitarias con pytest.
@@ -21,6 +21,10 @@ Cada push a `main` corre `.github/workflows/devsecops.yml`:
 5. Si todo pasa: construye la imagen Docker, la escanea, la publica en GHCR, la levanta y le hace una prueba de humo.
 
 Si cualquiera de los primeros cuatro falla, no se construye ni se despliega nada.
+
+Las ramas `demo/dependencia` y `demo/secreto` tienen a propósito una librería vulnerable y una llave en el código, para enseñar en la demo cómo se bloquean. En las ramas `demo/` el pipeline corre pero nunca despliega.
+
+La pantalla para la dependiente está en `http://localhost:8000/` y usa la plantilla [Tabler](https://tabler.io).
 
 ## Correrlo local
 
@@ -47,6 +51,7 @@ docker run -p 8000:8000 -e API_KEY=una-llave-local farmacia
 | GET | /salud | estado del servicio |
 | GET | /api/v1/productos | catálogo con existencias |
 | POST | /api/v1/ventas | registra un pedido |
+| GET | /api/v1/ventas | últimos 10 pedidos |
 | GET | /api/v1/ventas/{id} | consulta un pedido |
 
 Todos menos `/salud` piden el encabezado `X-API-Key`.
