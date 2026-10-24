@@ -35,7 +35,7 @@ Antes de empezar: tener abierto el repo en GitHub (pestaña Actions), una termin
 | Parte | Integrante |
 |---|---|
 | Problema de la farmacia y requisitos | Jonathan García |
-| Arquitectura C4 y trade-offs | José Ricardo Guerra |
+| Arquitectura C4 y trade-offs | Jonathan García |
 | Calidad (ISO 25010) y pruebas | Walter Herrera |
 | Pipeline y demo en vivo | José Daniel Paz |
 | Seguridad: CIA y OWASP | Julio Portillo |

@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 *.db
 .env
+docs/informe_hito2_devsecops.docx
+docs/Hito2_DevSecOps_Grupo04.docx
+~$*.docx
