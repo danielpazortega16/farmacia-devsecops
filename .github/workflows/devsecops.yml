@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Buscar llaves y contraseñas en todo el historial
-        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 detect --source /repo -v --redact
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 detect --source /repo -v --redact --log-opts="HEAD"
 
   pruebas:
     name: Pruebas unitarias
