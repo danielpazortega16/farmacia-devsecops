@@ -1,0 +1,86 @@
+name: pipeline-devsecops
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secretos:
+    name: Gitleaks (secretos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Buscar llaves y contraseñas en todo el historial
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 detect --source /repo -v --redact
+
+  pruebas:
+    name: Pruebas unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -v
+
+  sast:
+    name: Semgrep (SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install semgrep==1.180.0
+      - name: Analisis estatico
+        run: semgrep scan --config p/python --config p/owasp-top-ten --severity ERROR --severity WARNING --error app
+
+  sca:
+    name: Trivy (dependencias)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencias con CVE alto o critico
+        run: >
+          docker run --rm -v "$PWD:/src" aquasec/trivy:0.58.1
+          fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 /src
+
+  build-despliegue:
+    name: Imagen y despliegue
+    needs: [secretos, pruebas, sast, sca]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGEN: ghcr.io/${{ github.repository }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir imagen
+        run: docker build -t "${IMAGEN,,}" .
+      - name: Escanear la imagen
+        run: >
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1
+          image --severity CRITICAL --exit-code 1 --ignore-unfixed "${IMAGEN,,}"
+      - name: Publicar en GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "${IMAGEN,,}"
+      - name: Desplegar en entorno de pruebas
+        run: |
+          docker run -d --name farmacia -p 8000:8000 -e API_KEY="${{ secrets.API_KEY_STAGING || 'staging-demo' }}" "${IMAGEN,,}"
+          for i in $(seq 1 15); do curl -fs localhost:8000/salud && break; sleep 2; done
+      - name: Prueba de humo
+        run: |
+          curl -fs localhost:8000/salud
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/api/v1/productos)" = "401"
+          docker logs farmacia
