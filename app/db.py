@@ -9,7 +9,7 @@ def ruta_db():
 
 
 def conectar():
-    con = sqlite3.connect(ruta_db())
+    con = sqlite3.connect(ruta_db(), timeout=15)
     con.row_factory = sqlite3.Row
     return con
 

@@ -70,21 +70,30 @@ def listar_productos():
 
 @app.post("/api/v1/ventas", status_code=201, dependencies=[Depends(validar_llave)])
 def registrar_venta(pedido: Pedido):
-    with db.conectar() as con:
+    # si el mismo producto viene en varias lineas se suma antes de revisar existencias
+    cantidades = {}
+    for item in pedido.items:
+        cantidades[item.codigo] = cantidades.get(item.codigo, 0) + item.cantidad
+
+    con = db.conectar()
+    con.isolation_level = None
+    try:
+        # bloquea la base mientras se revisa y se descuenta, asi dos ventas a la vez no leen la misma existencia
+        con.execute("BEGIN IMMEDIATE")
         total = Decimal("0")
         lineas = []
-        for item in pedido.items:
-            prod = con.execute("SELECT * FROM productos WHERE codigo = ?", (item.codigo,)).fetchone()
+        for codigo, cantidad in cantidades.items():
+            prod = con.execute("SELECT * FROM productos WHERE codigo = ?", (codigo,)).fetchone()
             if prod is None:
-                raise HTTPException(404, f"Producto {item.codigo} no existe")
+                raise HTTPException(404, f"Producto {codigo} no existe")
             if prod["requiere_receta"] and not pedido.numero_receta:
                 raise HTTPException(400, f"{prod['nombre']} solo se vende con receta médica")
-            if prod["existencias"] < item.cantidad:
+            if prod["existencias"] < cantidad:
                 raise HTTPException(409, f"No hay suficiente {prod['nombre']}")
             # el precio sale de la base, nunca del cliente
             precio = Decimal(prod["precio"])
-            total += precio * item.cantidad
-            lineas.append((item.codigo, item.cantidad, str(precio)))
+            total += precio * cantidad
+            lineas.append((codigo, cantidad, str(precio)))
 
         fecha = datetime.now(timezone.utc).isoformat()
         cur = con.execute(
@@ -94,7 +103,16 @@ def registrar_venta(pedido: Pedido):
         venta_id = cur.lastrowid
         for codigo, cantidad, precio in lineas:
             con.execute("INSERT INTO detalle_venta VALUES (?, ?, ?, ?)", (venta_id, codigo, cantidad, precio))
-            con.execute("UPDATE productos SET existencias = existencias - ? WHERE codigo = ?", (cantidad, codigo))
+            con.execute(
+                "UPDATE productos SET existencias = existencias - ? WHERE codigo = ? AND existencias >= ?",
+                (cantidad, codigo, cantidad),
+            )
+        con.execute("COMMIT")
+    except Exception:
+        con.execute("ROLLBACK")
+        raise
+    finally:
+        con.close()
 
     return {"id": venta_id, "total": str(total), "estado": "APROBADA", "fecha": fecha}
 

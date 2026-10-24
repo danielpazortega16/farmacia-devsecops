@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -81,6 +83,38 @@ def test_lista_ultimas_ventas(cliente):
     ventas = cliente.get("/api/v1/ventas", headers=LLAVE).json()
     assert len(ventas) == 2
     assert ventas[0]["telefono"] == "44****77"
+
+
+def existencias(cliente, codigo):
+    productos = cliente.get("/api/v1/productos", headers=LLAVE).json()
+    return next(p for p in productos if p["codigo"] == codigo)["existencias"]
+
+
+def test_producto_repetido_se_suma(cliente):
+    # 7 + 7 de clonazepam con 12 en existencia
+    datos = pedido(items=[{"codigo": "CLZ2", "cantidad": 7}, {"codigo": "CLZ2", "cantidad": 7}], numero_receta="MS-1234")
+    assert cliente.post("/api/v1/ventas", json=datos, headers=LLAVE).status_code == 409
+    assert existencias(cliente, "CLZ2") == 12
+
+
+def test_ventas_al_mismo_tiempo(cliente):
+    # 15 pedidos de 1 tramadol a la vez, solo hay 10
+    datos = pedido(items=[{"codigo": "TRM50", "cantidad": 1}], numero_receta="MS-1234")
+    with ThreadPoolExecutor(max_workers=15) as hilos:
+        codigos = list(hilos.map(lambda _: registrar(datos), range(15)))
+    assert codigos.count(201) == 10
+    assert codigos.count(409) == 5
+    assert existencias(cliente, "TRM50") == 0
+
+
+def registrar(datos):
+    from app.main import Pedido, registrar_venta
+    from fastapi import HTTPException
+    try:
+        registrar_venta(Pedido(**datos))
+        return 201
+    except HTTPException as e:
+        return e.status_code
 
 
 def test_descuenta_existencias(cliente):
