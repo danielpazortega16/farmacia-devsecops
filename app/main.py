@@ -99,6 +99,15 @@ def registrar_venta(pedido: Pedido):
     return {"id": venta_id, "total": str(total), "estado": "APROBADA", "fecha": fecha}
 
 
+@app.get("/api/v1/ventas", dependencies=[Depends(validar_llave)])
+def ultimas_ventas():
+    with db.conectar() as con:
+        filas = con.execute(
+            "SELECT id, telefono, metodo_pago, numero_receta, total, fecha FROM ventas ORDER BY id DESC LIMIT 10"
+        ).fetchall()
+    return [dict(f) for f in filas]
+
+
 @app.get("/api/v1/ventas/{venta_id}", dependencies=[Depends(validar_llave)])
 def obtener_venta(venta_id: int):
     with db.conectar() as con:

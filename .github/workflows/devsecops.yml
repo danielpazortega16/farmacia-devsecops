@@ -14,7 +14,7 @@ jobs:
     name: Gitleaks (secretos)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Buscar llaves y contraseñas en todo el historial
@@ -24,8 +24,8 @@ jobs:
     name: Pruebas unitarias
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
@@ -35,8 +35,8 @@ jobs:
     name: Semgrep (SAST)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install semgrep==1.180.0
@@ -47,7 +47,7 @@ jobs:
     name: Trivy (dependencias)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Dependencias con CVE alto o critico
         run: >
           docker run --rm -v "$PWD:/src" aquasec/trivy:0.58.1
@@ -64,7 +64,7 @@ jobs:
     env:
       IMAGEN: ghcr.io/${{ github.repository }}:${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Construir imagen
         run: docker build -t "${IMAGEN,,}" .
       - name: Escanear la imagen

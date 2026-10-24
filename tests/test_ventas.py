@@ -75,6 +75,14 @@ def test_telefono_se_guarda_enmascarado(cliente):
     assert guardada["detalle"][0]["codigo"] == "PAR500"
 
 
+def test_lista_ultimas_ventas(cliente):
+    cliente.post("/api/v1/ventas", json=pedido(), headers=LLAVE)
+    cliente.post("/api/v1/ventas", json=pedido(telefono="44556677"), headers=LLAVE)
+    ventas = cliente.get("/api/v1/ventas", headers=LLAVE).json()
+    assert len(ventas) == 2
+    assert ventas[0]["telefono"] == "44****77"
+
+
 def test_descuenta_existencias(cliente):
     cliente.post("/api/v1/ventas", json=pedido(), headers=LLAVE)
     productos = cliente.get("/api/v1/productos", headers=LLAVE).json()
