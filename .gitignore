@@ -6,3 +6,6 @@ __pycache__/
 docs/informe_hito2_devsecops.docx
 docs/Hito2_DevSecOps_Grupo04.docx
 ~$*.docx
+reportes/
+.coverage
+entrega/

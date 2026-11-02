@@ -14,13 +14,14 @@ Como el sistema maneja datos de salud y de pago, cada cambio al código pasa por
 
 Cada push corre `.github/workflows/devsecops.yml`:
 
-1. Gitleaks: busca llaves y contraseñas en todo el historial.
-2. Pruebas unitarias con pytest.
+1. Gitleaks: busca llaves y contraseñas en el historial de la rama.
+2. Pruebas con pytest. Si la cobertura baja de 90 % el paso falla.
 3. Semgrep (SAST) con reglas de Python y OWASP Top 10.
-4. Trivy (SCA): falla si alguna dependencia tiene un CVE alto o crítico.
-5. Si todo pasa: construye la imagen Docker, la escanea, la publica en GHCR, la levanta y le hace una prueba de humo.
+4. Trivy (SCA): falla si alguna dependencia tiene un CVE alto o crítico. La base de vulnerabilidades se baja antes en un paso aparte, con tres espejos, para que un rojo aquí sea siempre una dependencia y no un problema de red.
+5. Si todo pasa: construye la imagen Docker, la escanea, genera el SBOM (CycloneDX), la publica en GHCR, la levanta y le hace una prueba de humo.
+6. DAST con OWASP ZAP sobre el contenedor ya levantado. Falla si faltan los encabezados de seguridad (reglas en `.zap/reglas.tsv`).
 
-Si cualquiera de los primeros cuatro falla, no se construye ni se despliega nada.
+Los pasos 1 a 4 corren en paralelo. Si cualquiera falla, no se construye ni se despliega nada. El reporte de ZAP y el SBOM quedan como artefactos de cada corrida.
 
 Las ramas `demo/dependencia` y `demo/secreto` tienen a propósito una librería vulnerable y una llave en el código, para enseñar en la demo cómo se bloquean. En las ramas `demo/` el pipeline corre pero nunca despliega.
 
@@ -32,7 +33,7 @@ La pantalla para la dependiente está en `http://localhost:8000/` y usa la plant
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements-dev.txt
-pytest -v
+pytest -v --cov=app
 set API_KEY=una-llave-local
 uvicorn app.main:app --reload
 ```
@@ -54,7 +55,15 @@ docker run -p 8000:8000 -e API_KEY=una-llave-local farmacia
 | GET | /api/v1/ventas | últimos 10 pedidos |
 | GET | /api/v1/ventas/{id} | consulta un pedido |
 
-Todos menos `/salud` piden el encabezado `X-API-Key`.
+Todos menos `/salud` piden el encabezado `X-API-Key`. `/salud` devuelve también la versión que está corriendo.
+
+## Operación
+
+La API escribe una línea JSON por cada petición (ruta, código y milisegundos) y por cada venta aprobada o rechazada con su motivo. No se escribe el teléfono ni el número de receta. En Docker se ven con `docker logs farmacia`.
+
+## Versiones
+
+Se usa versionamiento semántico. Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md) y cada versión tiene su etiqueta en git (`git tag`).
 
 Ejemplo de pedido:
 
