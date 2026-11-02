@@ -1,3 +1,4 @@
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -23,7 +24,14 @@ def pedido(**cambios):
 
 
 def test_salud(cliente):
-    assert cliente.get("/salud").json() == {"estado": "ok"}
+    assert cliente.get("/salud").json() == {"estado": "ok", "version": "1.0.0"}
+
+
+def test_encabezados_de_seguridad(cliente):
+    h = cliente.get("/").headers
+    assert h["X-Frame-Options"] == "DENY"
+    assert h["X-Content-Type-Options"] == "nosniff"
+    assert "frame-ancestors 'none'" in h["Content-Security-Policy"]
 
 
 def test_sin_llave_no_entra(cliente):
@@ -122,3 +130,20 @@ def test_descuenta_existencias(cliente):
     productos = cliente.get("/api/v1/productos", headers=LLAVE).json()
     par = next(p for p in productos if p["codigo"] == "PAR500")
     assert par["existencias"] == 118
+
+
+def test_bitacora_sin_datos_del_cliente(cliente, caplog):
+    caplog.set_level("INFO", logger="farmacia")
+    cliente.post("/api/v1/ventas", json=pedido(), headers=LLAVE)
+    datos = pedido(items=[{"codigo": "CLZ2", "cantidad": 1}], telefono="44556677")
+    cliente.post("/api/v1/ventas", json=datos, headers=LLAVE)
+    datos = pedido(items=[{"codigo": "CLZ2", "cantidad": 1}], numero_receta="MS-998877")
+    cliente.post("/api/v1/ventas", json=datos, headers=LLAVE)
+
+    eventos = [json.loads(r.getMessage()) for r in caplog.records]
+    assert [e["evento"] for e in eventos if e["evento"].startswith("venta")] == [
+        "venta_aprobada", "venta_rechazada", "venta_aprobada"
+    ]
+    texto = caplog.text
+    assert "55123456" not in texto and "44556677" not in texto
+    assert "MS-998877" not in texto
