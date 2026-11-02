@@ -52,6 +52,9 @@ CSP = (
     "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
     "font-src 'self' data: https://cdn.jsdelivr.net; "
     "img-src 'self' data: https://fastapi.tiangolo.com; "
+    "connect-src 'self'; "
+    "form-action 'self'; "
+    "base-uri 'self'; "
     "frame-ancestors 'none'"
 )
 
@@ -64,6 +67,9 @@ async def encabezados_seguridad(request: Request, call_next):
     respuesta.headers["X-Frame-Options"] = "DENY"
     respuesta.headers["Referrer-Policy"] = "no-referrer"
     respuesta.headers["Cache-Control"] = "no-store"
+    respuesta.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    respuesta.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    respuesta.headers["Cross-Origin-Resource-Policy"] = "same-origin"
     return respuesta
 
 

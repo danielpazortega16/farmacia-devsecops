@@ -97,7 +97,7 @@ jobs:
       - name: DAST con OWASP ZAP
         run: |
           cp .zap/reglas.tsv reportes/
-          docker run --rm --network host -v "$PWD/reportes:/zap/wrk" ghcr.io/zaproxy/zaproxy:2.16.1 \
+          docker run --rm --network host -v "$PWD/reportes:/zap/wrk" ghcr.io/zaproxy/zaproxy:2.17.0 \
             zap-baseline.py -t http://localhost:8000 -c reglas.tsv -r zap.html -J zap.json -I
       - name: Bitacora del contenedor
         if: always()

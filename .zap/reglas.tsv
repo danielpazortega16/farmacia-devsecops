@@ -2,3 +2,5 @@
 10021	FAIL	(Falta X-Content-Type-Options)
 10038	FAIL	(Falta Content Security Policy)
 10036	FAIL	(El servidor revela su version)
+10063	FAIL	(Falta Permissions-Policy)
+90003	FAIL	(Recurso externo sin integridad SRI)
