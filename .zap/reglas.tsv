@@ -1,0 +1,4 @@
+10020	FAIL	(Falta encabezado anti-clickjacking)
+10021	FAIL	(Falta X-Content-Type-Options)
+10038	FAIL	(Falta Content Security Policy)
+10036	FAIL	(El servidor revela su version)
