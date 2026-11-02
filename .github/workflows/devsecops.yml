@@ -29,7 +29,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - run: pytest -v
+      - name: Pruebas con cobertura (minimo 90 %)
+        run: pytest -v --cov=app --cov-report=term-missing --cov-fail-under=90
 
   sast:
     name: Semgrep (SAST)
@@ -48,13 +49,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Descargar base de vulnerabilidades
+        run: bash .github/scripts/trivy-db.sh
       - name: Dependencias con CVE alto o critico
         run: >
-          docker run --rm -v "$PWD:/src" aquasec/trivy:0.58.1
-          fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 /src
+          docker run --rm -v trivy-cache:/root/.cache -v "$PWD:/src" aquasec/trivy:0.58.1
+          fs --skip-db-update --scanners vuln --severity HIGH,CRITICAL --exit-code 1 /src
 
   build-despliegue:
-    name: Imagen y despliegue
+    name: Imagen, despliegue y DAST
     needs: [secretos, pruebas, sast, sca]
     # solo main llega a desplegarse
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -68,10 +71,17 @@ jobs:
       - uses: actions/checkout@v5
       - name: Construir imagen
         run: docker build -t "${IMAGEN,,}" .
+      - name: Descargar base de vulnerabilidades
+        run: bash .github/scripts/trivy-db.sh
       - name: Escanear la imagen
         run: >
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1
-          image --severity CRITICAL --exit-code 1 --ignore-unfixed "${IMAGEN,,}"
+          docker run --rm -v trivy-cache:/root/.cache -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1
+          image --skip-db-update --severity CRITICAL --exit-code 1 --ignore-unfixed "${IMAGEN,,}"
+      - name: Inventario de componentes (SBOM)
+        run: |
+          mkdir -p reportes && chmod 777 reportes
+          docker run --rm -v trivy-cache:/root/.cache -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/reportes:/out" aquasec/trivy:0.58.1 \
+            image --skip-db-update --format cyclonedx --output /out/sbom.cdx.json "${IMAGEN,,}"
       - name: Publicar en GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -84,4 +94,17 @@ jobs:
         run: |
           curl -fs localhost:8000/salud
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/api/v1/productos)" = "401"
-          docker logs farmacia
+      - name: DAST con OWASP ZAP
+        run: |
+          cp .zap/reglas.tsv reportes/
+          docker run --rm --network host -v "$PWD/reportes:/zap/wrk" ghcr.io/zaproxy/zaproxy:2.17.0 \
+            zap-baseline.py -t http://localhost:8000 -c reglas.tsv -r zap.html -J zap.json -I
+      - name: Bitacora del contenedor
+        if: always()
+        run: docker logs farmacia || true
+      - name: Guardar reportes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-${{ github.sha }}
+          path: reportes/
