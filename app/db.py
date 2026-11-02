@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from contextlib import contextmanager
 
 from app.catalogo import PRODUCTOS
 
@@ -9,13 +10,24 @@ def ruta_db():
 
 
 def conectar():
-    con = sqlite3.connect(ruta_db())
+    con = sqlite3.connect(ruta_db(), timeout=15)
     con.row_factory = sqlite3.Row
     return con
 
 
+@contextmanager
+def abrir():
+    # el with de sqlite3 solo confirma o deshace, no cierra la conexion
+    con = conectar()
+    try:
+        with con:
+            yield con
+    finally:
+        con.close()
+
+
 def inicializar():
-    with conectar() as con:
+    with abrir() as con:
         con.executescript(
             """
             CREATE TABLE IF NOT EXISTS productos (

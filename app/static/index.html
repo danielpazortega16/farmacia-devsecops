@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Farmacia La Esperanza</title>
   <!-- plantilla Tabler (https://tabler.io) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0/dist/css/tabler.min.css"
+        integrity="sha384-fkzLEr+R1vlsMqNHsxTOSmtcmf0+LuY6VkpET9w9/SVpXLQQXzUsSuF91EOMmk+n" crossorigin="anonymous">
   <style>
     .cantidad { width: 70px; }
     .agotado { color: #d63939; font-weight: 600; }
@@ -16,13 +16,9 @@
 <div class="page">
   <header class="navbar navbar-expand-md d-print-none">
     <div class="container-xl">
-      <span class="navbar-brand">
-        <i class="ti ti-first-aid-kit text-green me-2" style="font-size: 1.6rem"></i>
-        Farmacia La Esperanza
-      </span>
+      <span class="navbar-brand">Farmacia La Esperanza</span>
       <div class="navbar-nav flex-row order-md-last">
         <div class="input-group input-group-flat" style="width: 260px">
-          <span class="input-group-text"><i class="ti ti-key"></i></span>
           <input id="llave" type="password" class="form-control" placeholder="Llave de acceso">
           <button class="btn btn-outline-secondary" onclick="entrar()">Entrar</button>
         </div>
@@ -44,20 +40,17 @@
 
         <div class="row row-cards mb-3">
           <div class="col-sm-4">
-            <div class="card card-sm"><div class="card-body d-flex align-items-center">
-              <span class="bg-primary text-white avatar me-3"><i class="ti ti-receipt"></i></span>
+            <div class="card card-sm"><div class="card-status-start bg-primary"></div><div class="card-body">
               <div><div class="fw-bold" id="numVentas">-</div><div class="text-secondary">Pedidos registrados</div></div>
             </div></div>
           </div>
           <div class="col-sm-4">
-            <div class="card card-sm"><div class="card-body d-flex align-items-center">
-              <span class="bg-green text-white avatar me-3"><i class="ti ti-cash"></i></span>
-              <div><div class="fw-bold" id="totalVentas">-</div><div class="text-secondary">Total cobrado</div></div>
+            <div class="card card-sm"><div class="card-status-start bg-green"></div><div class="card-body">
+              <div><div class="fw-bold" id="totalVentas">-</div><div class="text-secondary">Cobrado en los últimos 10 pedidos</div></div>
             </div></div>
           </div>
           <div class="col-sm-4">
-            <div class="card card-sm"><div class="card-body d-flex align-items-center">
-              <span class="bg-orange text-white avatar me-3"><i class="ti ti-alert-triangle"></i></span>
+            <div class="card card-sm"><div class="card-status-start bg-orange"></div><div class="card-body">
               <div><div class="fw-bold" id="pocos">-</div><div class="text-secondary">Productos por acabarse</div></div>
             </div></div>
           </div>
@@ -103,9 +96,10 @@
                   <span class="text-secondary">Total estimado</span>
                   <strong id="estimado">Q0.00</strong>
                 </div>
-                <button class="btn btn-primary w-100" onclick="registrar()">
-                  <i class="ti ti-check me-1"></i> Registrar pedido
+                <button id="btnRegistrar" class="btn btn-primary w-100" onclick="registrar()">
+                  Registrar pedido
                 </button>
+                <div id="resultado" class="mt-3"></div>
               </div>
             </div>
 
@@ -129,8 +123,8 @@ function encabezados() {
   return { "X-API-Key": document.getElementById("llave").value, "Content-Type": "application/json" };
 }
 
-function aviso(tipo, texto) {
-  const caja = document.getElementById("aviso");
+function aviso(tipo, texto, donde = "aviso") {
+  const caja = document.getElementById(donde);
   caja.innerHTML = "";
   const div = document.createElement("div");
   div.className = "alert alert-" + tipo;
@@ -147,12 +141,18 @@ function celda(tr, texto, clase) {
 }
 
 async function entrar() {
-  const r = await fetch("/api/v1/productos", { headers: encabezados() });
-  if (!r.ok) return aviso("danger", "La llave de acceso no es correcta.");
   document.getElementById("aviso").innerHTML = "";
+  document.getElementById("resultado").innerHTML = "";
+  if (!(await cargarDatos())) aviso("danger", "La llave de acceso no es correcta.");
+}
+
+async function cargarDatos() {
+  const r = await fetch("/api/v1/productos", { headers: encabezados() });
+  if (!r.ok) return false;
   productos = await r.json();
   pintarProductos();
-  cargarVentas();
+  await cargarVentas();
+  return true;
 }
 
 function pintarProductos() {
@@ -228,17 +228,24 @@ async function registrar() {
   // en la demo el POS devuelve un token fijo, nunca se manda el número de tarjeta
   if (pedido.metodo_pago === "tarjeta") pedido.token_tarjeta = "tok_demo12345678";
 
-  const r = await fetch("/api/v1/ventas", { method: "POST", headers: encabezados(), body: JSON.stringify(pedido) });
-  const datos = await r.json();
-  if (r.ok) {
-    aviso("success", "Pedido #" + datos.id + " registrado. Cobrar Q" + datos.total + " al entregar.");
-    document.getElementById("telefono").value = "";
-    document.getElementById("receta").value = "";
-    entrar();
-  } else if (r.status === 422) {
-    aviso("warning", "Revise los datos: el teléfono lleva 8 dígitos, el pedido necesita al menos un producto y la receta va con formato MS-123456.");
-  } else {
-    aviso("danger", datos.detail);
+  // se desactiva el boton mientras se guarda para que un doble clic no registre dos pedidos
+  const boton = document.getElementById("btnRegistrar");
+  boton.disabled = true;
+  try {
+    const r = await fetch("/api/v1/ventas", { method: "POST", headers: encabezados(), body: JSON.stringify(pedido) });
+    const datos = await r.json();
+    if (r.ok) {
+      document.getElementById("telefono").value = "";
+      document.getElementById("receta").value = "";
+      await cargarDatos();
+      aviso("success", "Pedido #" + datos.id + " registrado. Cobrar Q" + datos.total + " al entregar.", "resultado");
+    } else if (r.status === 422) {
+      aviso("warning", "Revise los datos: el teléfono lleva 8 dígitos, el pedido necesita al menos un producto y la receta va con formato MS-123456.", "resultado");
+    } else {
+      aviso("danger", datos.detail, "resultado");
+    }
+  } finally {
+    boton.disabled = false;
   }
 }
 </script>
