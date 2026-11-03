@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import json
 import logging
@@ -10,12 +11,12 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, model_validator
 
 from app import db
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger("farmacia")
@@ -33,13 +34,26 @@ async def ciclo_vida(app):
     yield
 
 
-app = FastAPI(title="Farmacia - registro de pedidos", version=VERSION, lifespan=ciclo_vida)
+# sin /docs ni /openapi.json: la API no se describe sola a quien no tiene llave
+app = FastAPI(
+    title="Farmacia - registro de pedidos",
+    version=VERSION,
+    lifespan=ciclo_vida,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 
 @app.middleware("http")
 async def bitacora(request: Request, call_next):
     inicio = time.perf_counter()
-    respuesta = await call_next(request)
+    try:
+        respuesta = await call_next(request)
+    except Exception as e:
+        # un error no controlado igual se registra y sale con los encabezados de seguridad
+        registrar_evento("error_interno", ruta=request.url.path, tipo=type(e).__name__)
+        respuesta = JSONResponse({"detail": "Error interno"}, status_code=500)
     ms = round((time.perf_counter() - inicio) * 1000, 1)
     registrar_evento("peticion", metodo=request.method, ruta=request.url.path, estado=respuesta.status_code, ms=ms)
     return respuesta
@@ -51,7 +65,7 @@ CSP = (
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
     "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
     "font-src 'self' data: https://cdn.jsdelivr.net; "
-    "img-src 'self' data: https://fastapi.tiangolo.com; "
+    "img-src 'self' data:; "
     "connect-src 'self'; "
     "form-action 'self'; "
     "base-uri 'self'; "
@@ -76,7 +90,8 @@ async def encabezados_seguridad(request: Request, call_next):
 def validar_llave(x_api_key: str = Header(default="")):
     esperada = os.environ.get("API_KEY", "")
     # sin llave configurada no se atiende nada
-    if not esperada or not hmac.compare_digest(x_api_key, esperada):
+    # se comparan bytes: con texto, compare_digest truena si la llave trae una ñ o un acento
+    if not esperada or not hmac.compare_digest(x_api_key.encode(), esperada.encode()):
         raise HTTPException(status_code=401, detail="Llave de acceso inválida")
 
 
@@ -86,7 +101,7 @@ class Item(BaseModel):
 
 
 class Pedido(BaseModel):
-    telefono: str = Field(pattern=r"^[2-7]\d{7}$")
+    telefono: str = Field(pattern=r"^[2-9]\d{7}$")
     items: list[Item] = Field(min_length=1, max_length=15)
     metodo_pago: Literal["efectivo", "tarjeta", "transferencia"]
     token_tarjeta: Optional[str] = Field(default=None, pattern=r"^tok_[A-Za-z0-9]{8,40}$")
@@ -101,6 +116,12 @@ class Pedido(BaseModel):
 
 def enmascarar(telefono):
     return telefono[:2] + "****" + telefono[-2:]
+
+
+def enmascarar_receta(venta):
+    # la receta completa queda en la base para auditoria, pero la API no la devuelve
+    receta = venta["numero_receta"]
+    return venta | {"numero_receta": receta[:3] + "****" + receta[-2:] if receta else None}
 
 
 @app.get("/", include_in_schema=False)
@@ -121,17 +142,33 @@ def listar_productos():
 
 
 @app.post("/api/v1/ventas", status_code=201, dependencies=[Depends(validar_llave)])
-def registrar_venta(pedido: Pedido):
+def registrar_venta(
+    pedido: Pedido,
+    idempotency_key: Optional[str] = Header(default=None, pattern=r"^[A-Za-z0-9-]{8,64}$"),
+):
     # si el mismo producto viene en varias lineas se suma antes de revisar existencias
-    cantidades = {}
+    cantidades: dict[str, int] = {}
     for item in pedido.items:
         cantidades[item.codigo] = cantidades.get(item.codigo, 0) + item.cantidad
+
+    # si la red se cae y la pantalla reintenta con la misma clave, se devuelve el pedido ya guardado
+    huella = hashlib.sha256(pedido.model_dump_json().encode()).hexdigest()
 
     con = db.conectar()
     con.isolation_level = None
     try:
         # bloquea la base mientras se revisa y se descuenta, asi dos ventas a la vez no leen la misma existencia
         con.execute("BEGIN IMMEDIATE")
+        if idempotency_key:
+            previa = con.execute(
+                "SELECT id, total, fecha, huella FROM ventas WHERE clave = ?", (idempotency_key,)
+            ).fetchone()
+            if previa is not None:
+                if previa["huella"] != huella:
+                    raise HTTPException(409, "Esa clave ya se usó con otro pedido")
+                con.execute("ROLLBACK")
+                registrar_evento("venta_repetida", id=previa["id"])
+                return {"id": previa["id"], "total": previa["total"], "estado": "APROBADA", "fecha": previa["fecha"]}
         total = Decimal("0")
         lineas = []
         for codigo, cantidad in cantidades.items():
@@ -149,19 +186,24 @@ def registrar_venta(pedido: Pedido):
 
         fecha = datetime.now(timezone.utc).isoformat()
         cur = con.execute(
-            "INSERT INTO ventas (telefono, metodo_pago, numero_receta, total, fecha) VALUES (?, ?, ?, ?, ?)",
-            (enmascarar(pedido.telefono), pedido.metodo_pago, pedido.numero_receta, str(total), fecha),
+            "INSERT INTO ventas (telefono, metodo_pago, numero_receta, total, fecha, clave, huella)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                enmascarar(pedido.telefono), pedido.metodo_pago, pedido.numero_receta,
+                str(total), fecha, idempotency_key, huella,
+            ),
         )
         venta_id = cur.lastrowid
-        for codigo, cantidad, precio in lineas:
-            con.execute("INSERT INTO detalle_venta VALUES (?, ?, ?, ?)", (venta_id, codigo, cantidad, precio))
+        for codigo, cantidad, precio_unitario in lineas:
+            con.execute("INSERT INTO detalle_venta VALUES (?, ?, ?, ?)", (venta_id, codigo, cantidad, precio_unitario))
             con.execute(
                 "UPDATE productos SET existencias = existencias - ? WHERE codigo = ? AND existencias >= ?",
                 (cantidad, codigo, cantidad),
             )
         con.execute("COMMIT")
     except Exception as e:
-        con.execute("ROLLBACK")
+        if con.in_transaction:
+            con.execute("ROLLBACK")
         if isinstance(e, HTTPException):
             registrar_evento("venta_rechazada", estado=e.status_code, motivo=e.detail)
         raise
@@ -179,7 +221,7 @@ def ultimas_ventas():
         filas = con.execute(
             "SELECT id, telefono, metodo_pago, numero_receta, total, fecha FROM ventas ORDER BY id DESC LIMIT 10"
         ).fetchall()
-    return [dict(f) for f in filas]
+    return [enmascarar_receta(dict(f)) for f in filas]
 
 
 @app.get("/api/v1/ventas/{venta_id}", dependencies=[Depends(validar_llave)])
@@ -191,4 +233,4 @@ def obtener_venta(venta_id: int):
         detalle = con.execute(
             "SELECT codigo, cantidad, precio_unitario FROM detalle_venta WHERE venta_id = ?", (venta_id,)
         ).fetchall()
-    return dict(venta) | {"detalle": [dict(d) for d in detalle]}
+    return enmascarar_receta(dict(venta)) | {"detalle": [dict(d) for d in detalle]}

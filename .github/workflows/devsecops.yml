@@ -14,7 +14,7 @@ jobs:
     name: Gitleaks (secretos)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
       - name: Buscar llaves y contraseñas en todo el historial
@@ -24,11 +24,13 @@ jobs:
     name: Pruebas unitarias
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
+      - name: Revision de tipos (mypy)
+        run: mypy app
       - name: Pruebas con cobertura (minimo 90 %)
         run: pytest -v --cov=app --cov-report=term-missing --cov-fail-under=90
 
@@ -36,19 +38,19 @@ jobs:
     name: Semgrep (SAST)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
       - run: pip install semgrep==1.180.0
-      - name: Analisis estatico
-        run: semgrep scan --config p/python --config p/owasp-top-ten --severity ERROR --severity WARNING --error app
+      - name: Analisis estatico (codigo, pruebas, pipeline y Dockerfile)
+        run: semgrep scan --config p/python --config p/owasp-top-ten --severity ERROR --severity WARNING --error .
 
   sca:
     name: Trivy (dependencias)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Descargar base de vulnerabilidades
         run: bash .github/scripts/trivy-db.sh
       - name: Dependencias con CVE alto o critico
@@ -68,7 +70,7 @@ jobs:
     env:
       IMAGEN: ghcr.io/${{ github.repository }}:${{ github.sha }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Construir imagen
         run: docker build -t "${IMAGEN,,}" .
       - name: Descargar base de vulnerabilidades
@@ -87,8 +89,12 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "${IMAGEN,,}"
       - name: Desplegar en entorno de pruebas
+        env:
+          API_KEY: ${{ secrets.API_KEY_STAGING }}
         run: |
-          docker run -d --name farmacia -p 8000:8000 -e API_KEY="${{ secrets.API_KEY_STAGING || 'staging-demo' }}" "${IMAGEN,,}"
+          # sin el secreto no se despliega: no hay llave de respaldo escrita en el repositorio
+          if [ -z "$API_KEY" ]; then echo "::error::Falta el secreto API_KEY_STAGING"; exit 1; fi
+          docker run -d --name farmacia -p 8000:8000 -e API_KEY "${IMAGEN,,}"
           for i in $(seq 1 15); do curl -fs localhost:8000/salud && break; sleep 2; done
       - name: Prueba de humo
         run: |
@@ -104,7 +110,7 @@ jobs:
         run: docker logs farmacia || true
       - name: Guardar reportes
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: reportes-${{ github.sha }}
           path: reportes/
