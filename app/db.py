@@ -12,6 +12,8 @@ def ruta_db():
 def conectar():
     con = sqlite3.connect(ruta_db(), timeout=15)
     con.row_factory = sqlite3.Row
+    # SQLite trae las claves foraneas apagadas por defecto
+    con.execute("PRAGMA foreign_keys = ON")
     return con
 
 
@@ -43,7 +45,9 @@ def inicializar():
                 metodo_pago TEXT NOT NULL,
                 numero_receta TEXT,
                 total TEXT NOT NULL,
-                fecha TEXT NOT NULL
+                fecha TEXT NOT NULL,
+                clave TEXT,
+                huella TEXT
             );
             CREATE TABLE IF NOT EXISTS detalle_venta (
                 venta_id INTEGER NOT NULL REFERENCES ventas(id),
@@ -53,6 +57,12 @@ def inicializar():
             );
             """
         )
+        # bases creadas antes de la 1.1.0 no tienen las columnas de idempotencia
+        columnas = {c["name"] for c in con.execute("PRAGMA table_info(ventas)")}
+        if "clave" not in columnas:
+            con.execute("ALTER TABLE ventas ADD COLUMN clave TEXT")
+            con.execute("ALTER TABLE ventas ADD COLUMN huella TEXT")
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ventas_clave ON ventas(clave)")
         for p in PRODUCTOS:
             con.execute(
                 "INSERT OR IGNORE INTO productos VALUES (?, ?, ?, ?, ?)",

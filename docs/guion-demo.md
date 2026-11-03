@@ -22,6 +22,8 @@ uvicorn app.main:app
 
 - Cambio pequeño en main (por ejemplo, agregar un producto en app/catalogo.py), commit y push.
 - En Actions se ven los 4 controles en paralelo y luego imagen, despliegue y prueba de humo.
+- Abrir el paso de pruebas: 16 pruebas y la cobertura (falla si baja de 90 %).
+- Abrir el paso de ZAP: 0 fallas y los avisos que quedan. Abajo de la corrida están el reporte de ZAP y el SBOM para descargar.
 
 ## 3. Librería vulnerable (1.5 min)
 
@@ -37,7 +39,7 @@ uvicorn app.main:app
 
 ## 5. Cierre (30 s)
 
-- Volver a la corrida en verde de main: nada llega a la farmacia sin pasar los cuatro controles. Las ramas `demo/` corren el pipeline pero nunca despliegan.
+- Volver a la corrida en verde de main: nada llega a la farmacia sin pasar los cuatro controles, y después del despliegue ZAP la revisa desde afuera. Las ramas `demo/` corren el pipeline pero nunca despliegan.
 
 ## Quién presenta qué
 

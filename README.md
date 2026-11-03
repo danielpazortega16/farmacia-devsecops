@@ -15,11 +15,13 @@ Como el sistema maneja datos de salud y de pago, cada cambio al código pasa por
 Cada push corre `.github/workflows/devsecops.yml`:
 
 1. Gitleaks: busca llaves y contraseñas en el historial de la rama.
-2. Pruebas con pytest. Si la cobertura baja de 90 % el paso falla.
-3. Semgrep (SAST) con reglas de Python y OWASP Top 10.
+2. Revisión de tipos con mypy y pruebas con pytest. Si la cobertura baja de 90 % el paso falla.
+3. Semgrep (SAST) con reglas de Python y OWASP Top 10, sobre todo el repositorio: código, pruebas, el propio workflow y el Dockerfile. Las acciones de GitHub están fijadas por commit, no por etiqueta.
 4. Trivy (SCA): falla si alguna dependencia tiene un CVE alto o crítico. La base de vulnerabilidades se baja antes en un paso aparte, con tres espejos, para que un rojo aquí sea siempre una dependencia y no un problema de red.
 5. Si todo pasa: construye la imagen Docker, la escanea, genera el SBOM (CycloneDX), la publica en GHCR, la levanta y le hace una prueba de humo.
 6. DAST con OWASP ZAP sobre el contenedor ya levantado. Falla si faltan los encabezados de seguridad (reglas en `.zap/reglas.tsv`).
+
+El despliegue usa la llave del secreto `API_KEY_STAGING`; si el secreto no existe, se genera una llave al azar que solo vive en esa corrida. Ya no hay una llave por defecto escrita en el workflow.
 
 Los pasos 1 a 4 corren en paralelo. Si cualquiera falla, no se construye ni se despliega nada. El reporte de ZAP y el SBOM quedan como artefactos de cada corrida.
 
@@ -55,7 +57,11 @@ docker run -p 8000:8000 -e API_KEY=una-llave-local farmacia
 | GET | /api/v1/ventas | últimos 10 pedidos |
 | GET | /api/v1/ventas/{id} | consulta un pedido |
 
-Todos menos `/salud` piden el encabezado `X-API-Key`. `/salud` devuelve también la versión que está corriendo.
+Todos menos `/salud` piden el encabezado `X-API-Key`. `/salud` devuelve también la versión que está corriendo. La documentación automática de FastAPI (`/docs`, `/redoc`, `/openapi.json`) está apagada.
+
+`POST /api/v1/ventas` acepta el encabezado opcional `Idempotency-Key` (8 a 64 letras, números o guiones). Si llega dos veces la misma clave con el mismo pedido, el servidor devuelve la venta ya guardada en vez de crear otra y descontar inventario dos veces; con la misma clave y otro pedido responde 409. La pantalla manda una clave nueva por pedido y la reutiliza si la red falla.
+
+En los listados el teléfono y el número de receta salen enmascarados (`55****56`, `MS-****56`). La receta completa queda en la base para auditoría.
 
 ## Operación
 
