@@ -2,6 +2,22 @@
 
 Versionamiento semántico: MAYOR.MENOR.PARCHE.
 
+## 1.1.0 - 2026-11-03
+
+Correcciones de la revisión de la fase 3.
+
+- `Idempotency-Key` en `POST /api/v1/ventas`: un reintento por red ya no registra el pedido dos veces. Antes el doble clic solo se evitaba en el navegador.
+- Arreglo: una llave con ñ o acentos tiraba la API con un 500. Ahora es 401.
+- Los errores no controlados salen con los encabezados de seguridad y quedan en la bitácora.
+- Arreglo: las claves foráneas de SQLite estaban apagadas.
+- Se aceptan teléfonos que empiezan con 8 y 9.
+- `/docs`, `/redoc` y `/openapi.json` apagados.
+- El número de receta sale enmascarado en la API.
+- mypy en el trabajo de pruebas; arreglado `precio`, que era `Decimal` en un bucle y texto en el otro.
+- Semgrep revisa todo el repositorio y las acciones de GitHub quedan fijadas por commit.
+- El despliegue ya no usa una llave escrita en el workflow: toma el secreto `API_KEY_STAGING` o, si no existe, genera una al azar para esa corrida.
+- Pruebas nuevas: los dos 404, pedido rechazado a medias sin descontar inventario, y concurrencia por HTTP con llave.
+
 ## 1.0.0 - 2026-11-02
 
 Versión para la presentación final.

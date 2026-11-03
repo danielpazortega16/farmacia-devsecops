@@ -217,6 +217,9 @@ async function cargarVentas() {
   document.getElementById("totalVentas").textContent = "Q" + suma.toFixed(2);
 }
 
+// clave del pedido en curso: si la red falla y se vuelve a dar clic, el servidor reconoce el reintento
+let clavePedido = null;
+
 async function registrar() {
   const pedido = {
     telefono: document.getElementById("telefono").value.trim(),
@@ -231,8 +234,21 @@ async function registrar() {
   // se desactiva el boton mientras se guarda para que un doble clic no registre dos pedidos
   const boton = document.getElementById("btnRegistrar");
   boton.disabled = true;
+  clavePedido = clavePedido || crypto.randomUUID();
   try {
-    const r = await fetch("/api/v1/ventas", { method: "POST", headers: encabezados(), body: JSON.stringify(pedido) });
+    let r;
+    try {
+      r = await fetch("/api/v1/ventas", {
+        method: "POST",
+        headers: { ...encabezados(), "Idempotency-Key": clavePedido },
+        body: JSON.stringify(pedido),
+      });
+    } catch {
+      aviso("danger", "Se perdió la conexión. Vuelva a darle a Registrar: el pedido no se duplica.", "resultado");
+      return;
+    }
+    // ya hubo respuesta del servidor, el siguiente pedido lleva otra clave
+    clavePedido = null;
     const datos = await r.json();
     if (r.ok) {
       document.getElementById("telefono").value = "";
