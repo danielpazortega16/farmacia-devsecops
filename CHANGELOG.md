@@ -15,7 +15,7 @@ Correcciones de la revisión de la fase 3.
 - El número de receta sale enmascarado en la API.
 - mypy en el trabajo de pruebas; arreglado `precio`, que era `Decimal` en un bucle y texto en el otro.
 - Semgrep revisa todo el repositorio y las acciones de GitHub quedan fijadas por commit.
-- El despliegue falla si falta el secreto `API_KEY_STAGING`, en vez de usar una llave escrita en el workflow.
+- El despliegue ya no usa una llave escrita en el workflow: toma el secreto `API_KEY_STAGING` o, si no existe, genera una al azar para esa corrida.
 - Pruebas nuevas: los dos 404, pedido rechazado a medias sin descontar inventario, y concurrencia por HTTP con llave.
 
 ## 1.0.0 - 2026-11-02

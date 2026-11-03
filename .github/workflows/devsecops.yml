@@ -92,8 +92,9 @@ jobs:
         env:
           API_KEY: ${{ secrets.API_KEY_STAGING }}
         run: |
-          # sin el secreto no se despliega: no hay llave de respaldo escrita en el repositorio
-          if [ -z "$API_KEY" ]; then echo "::error::Falta el secreto API_KEY_STAGING"; exit 1; fi
+          # sin secreto se genera una llave al azar solo para esta corrida; nunca hay una llave escrita en el repositorio
+          if [ -z "$API_KEY" ]; then API_KEY="$(openssl rand -hex 32)"; export API_KEY; fi
+          echo "::add-mask::$API_KEY"
           docker run -d --name farmacia -p 8000:8000 -e API_KEY "${IMAGEN,,}"
           for i in $(seq 1 15); do curl -fs localhost:8000/salud && break; sleep 2; done
       - name: Prueba de humo

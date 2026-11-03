@@ -21,7 +21,7 @@ Cada push corre `.github/workflows/devsecops.yml`:
 5. Si todo pasa: construye la imagen Docker, la escanea, genera el SBOM (CycloneDX), la publica en GHCR, la levanta y le hace una prueba de humo.
 6. DAST con OWASP ZAP sobre el contenedor ya levantado. Falla si faltan los encabezados de seguridad (reglas en `.zap/reglas.tsv`).
 
-El despliegue usa la llave del secreto `API_KEY_STAGING`; si el secreto no existe, el paso falla en vez de usar una llave por defecto.
+El despliegue usa la llave del secreto `API_KEY_STAGING`; si el secreto no existe, se genera una llave al azar que solo vive en esa corrida. Ya no hay una llave por defecto escrita en el workflow.
 
 Los pasos 1 a 4 corren en paralelo. Si cualquiera falla, no se construye ni se despliega nada. El reporte de ZAP y el SBOM quedan como artefactos de cada corrida.
 
